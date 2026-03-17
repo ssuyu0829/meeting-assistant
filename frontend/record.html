@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>紀錄會議 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .record-nav { display:flex; flex-direction:column; gap:0.75rem; margin-top:1rem; }
+    .record-nav-item {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:1rem 1.25rem; background:var(--card); border:1px solid var(--border);
+      border-radius:var(--radius); cursor:pointer; transition:border-color 0.15s;
+    }
+    .record-nav-item:hover { border-color:var(--taupe); }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page" style="max-width:600px">
+    <div class="breadcrumb">
+      <span onclick="history.back()">← 返回</span>
+    </div>
+    <h1 class="page-title">紀錄會議</h1>
+    <p class="page-subtitle" id="meeting-name-sub"></p>
+
+    <div class="record-nav">
+      <div class="record-nav-item" id="nav-attendance">
+        <div>
+          <div style="font-weight:500">出缺勤</div>
+          <div style="font-size:0.8rem;color:var(--muted)">記錄出席狀況與任務完成</div>
+        </div>
+        <span style="color:var(--muted)">›</span>
+      </div>
+      <div class="record-nav-item" id="nav-notes">
+        <div>
+          <div style="font-weight:500">會議記錄</div>
+          <div style="font-size:0.8rem;color:var(--muted)">記錄會議內容</div>
+        </div>
+        <span style="color:var(--muted)">›</span>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+
+    async function init() {
+      const meeting = await API.getMeeting(meetingId);
+      document.getElementById("meeting-name-sub").textContent = meeting.name;
+    }
+
+    document.getElementById("nav-attendance").addEventListener("click", () => {
+      window.location.href = `/attendance.html?id=${meetingId}`;
+    });
+    document.getElementById("nav-notes").addEventListener("click", () => {
+      window.location.href = `/notes.html?id=${meetingId}`;
+    });
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>填寫時間 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .time-col { width: 110px; text-align: right; padding-right: 0.75rem;
+                font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .select-all-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="breadcrumb">
+      <span onclick="history.back()">← 返回</span>
+    </div>
+
+    <h1 class="page-title">新增你的時間</h1>
+    <p class="page-subtitle">點選你方便的時段（可複選）</p>
+
+    <div class="select-all-row">
+      <input type="checkbox" id="chk-all" style="accent-color:var(--sage);width:16px;height:16px">
+      <label for="chk-all" style="font-size:0.875rem;cursor:pointer">全選</label>
+    </div>
+
+    <div class="avail-wrap card" style="padding:1rem">
+      <table class="avail-table" id="avail-table">
+        <thead><tr id="avail-header"></tr></thead>
+        <tbody id="avail-body"></tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:0.75rem">
+      <button class="btn btn-ghost" onclick="history.back()">取消</button>
+      <button class="btn btn-primary" id="btn-save">儲存</button>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+
+    // chkState[date][slot] = bool
+    const chkState = {};
+    let dates = [];
+
+    async function init() {
+      const data = await API.getAvailability(meetingId);
+      dates = data.dates;
+
+      // pre-fill my slots
+      dates.forEach(d => {
+        chkState[d] = {};
+        for (let i = 0; i < 16; i++) chkState[d][i] = false;
+        (data.my_slots[d] || []).forEach(i => { chkState[d][i] = true; });
+      });
+
+      buildTable(data.hour_slots);
+    }
+
+    function buildTable(hourSlots) {
+      // header row
+      const headerRow = document.getElementById("avail-header");
+      headerRow.innerHTML = `<th style="width:110px"></th>`;
+      dates.forEach(d => {
+        const th = document.createElement("th");
+        th.textContent = d.slice(5);  // show MM/DD
+        headerRow.appendChild(th);
+      });
+
+      // body rows
+      const tbody = document.getElementById("avail-body");
+      tbody.innerHTML = "";
+      hourSlots.forEach((label, slotIdx) => {
+        const tr = document.createElement("tr");
+        const timeTd = document.createElement("td");
+        timeTd.className = "time-label";
+        timeTd.textContent = label;
+        tr.appendChild(timeTd);
+
+        dates.forEach(date => {
+          const td = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.className = "avail-cell" + (chkState[date][slotIdx] ? " selected" : "");
+          btn.addEventListener("click", () => {
+            chkState[date][slotIdx] = !chkState[date][slotIdx];
+            btn.classList.toggle("selected", chkState[date][slotIdx]);
+            updateSelectAll();
+          });
+          td.appendChild(btn);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updateSelectAll() {
+      const all = dates.every(d => Object.values(chkState[d]).every(v => v));
+      document.getElementById("chk-all").checked = all;
+    }
+
+    document.getElementById("chk-all").addEventListener("change", e => {
+      const val = e.target.checked;
+      dates.forEach(d => {
+        for (let i = 0; i < 16; i++) chkState[d][i] = val;
+      });
+      document.querySelectorAll(".avail-cell").forEach(btn =>
+        btn.classList.toggle("selected", val)
+      );
+    });
+
+    document.getElementById("btn-save").addEventListener("click", async () => {
+      // build slots: {date: [slot_indices]}
+      const slots = {};
+      dates.forEach(d => {
+        slots[d] = Object.entries(chkState[d])
+          .filter(([, v]) => v)
+          .map(([k]) => parseInt(k));
+      });
+      await API.submitAvailability(meetingId, slots);
+      showToast("已儲存");
+      setTimeout(() => history.back(), 700);
+    });
+
+    init();
+  </script>
+</body>
+</html>

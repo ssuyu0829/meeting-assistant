@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>你的團體 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:2rem">
+      <div>
+        <h1 class="page-title">你的團體</h1>
+        <p class="page-subtitle" style="margin:0">YOUR GROUPS</p>
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-ghost" id="btn-join">加入團體</button>
+        <button class="btn btn-primary" id="btn-create">建立新團體</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input class="toolbar-search" type="text" id="search-input" placeholder="搜尋團體…">
+    </div>
+
+    <div class="item-grid" id="groups-grid">
+      <div class="empty" id="empty-msg" style="display:none;grid-column:1/-1">
+        尚未加入任何團體
+      </div>
+    </div>
+  </main>
+
+  <!-- Create group modal -->
+  <div class="modal-overlay" id="modal-create">
+    <div class="modal">
+      <p class="modal-title">建立新團體</p>
+      <div class="form-group">
+        <label class="form-label">團體名稱（至多5字）</label>
+        <input class="form-input" id="new-group-name" maxlength="5" placeholder="例：設計組">
+      </div>
+      <div class="form-group">
+        <label class="form-label">邀請碼</label>
+        <input class="form-input" id="new-group-code" placeholder="自訂邀請碼">
+      </div>
+      <p class="err" id="create-err" style="color:var(--red-soft);font-size:0.8rem"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-create')">取消</button>
+        <button class="btn btn-primary" id="btn-create-confirm">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join group modal -->
+  <div class="modal-overlay" id="modal-join">
+    <div class="modal">
+      <p class="modal-title">加入團體</p>
+      <div class="form-group">
+        <label class="form-label">邀請碼</label>
+        <input class="form-input" id="join-code" placeholder="輸入邀請碼">
+      </div>
+      <p class="err" id="join-err" style="color:var(--red-soft);font-size:0.8rem"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-join')">取消</button>
+        <button class="btn btn-primary" id="btn-join-confirm">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    let allGroups = [];
+
+    async function loadGroups() {
+      allGroups = await API.listGroups();
+      renderGroups(allGroups);
+    }
+
+    function renderGroups(groups) {
+      const grid = document.getElementById("groups-grid");
+      const empty = document.getElementById("empty-msg");
+      grid.innerHTML = "";
+      if (!groups.length) { empty.style.display = "block"; grid.appendChild(empty); return; }
+      empty.style.display = "none";
+      groups.forEach(g => {
+        const card = document.createElement("div");
+        card.className = "item-card";
+        card.innerHTML = `
+          <div class="item-card-name">${g.name}</div>
+          <div class="item-card-meta">${g.member_count} 位成員</div>
+          <div class="item-card-badge ${g.role}">${g.role === 'leader' ? '建立者' : '成員'}</div>
+        `;
+        card.addEventListener("click", () => {
+          localStorage.setItem("currentGroup", JSON.stringify(g));
+          window.location.href = `/meetings.html?group=${g.id}`;
+        });
+        grid.appendChild(card);
+      });
+    }
+
+    // search
+    document.getElementById("search-input").addEventListener("input", e => {
+      const q = e.target.value.trim().toLowerCase();
+      renderGroups(allGroups.filter(g => g.name.toLowerCase().includes(q)));
+    });
+
+    // create
+    document.getElementById("btn-create").addEventListener("click", () => {
+      document.getElementById("new-group-name").value = "";
+      document.getElementById("new-group-code").value = "";
+      document.getElementById("create-err").textContent = "";
+      openModal("modal-create");
+    });
+
+    document.getElementById("btn-create-confirm").addEventListener("click", async () => {
+      const name = document.getElementById("new-group-name").value.trim();
+      const code = document.getElementById("new-group-code").value.trim();
+      const errEl = document.getElementById("create-err");
+      errEl.textContent = "";
+      if (!name || !code) { errEl.textContent = "請填寫所有欄位"; return; }
+      try {
+        await API.createGroup(name, code);
+        closeModal("modal-create");
+        showToast("團體建立成功");
+        loadGroups();
+      } catch (e) { errEl.textContent = e.message; }
+    });
+
+    // join
+    document.getElementById("btn-join").addEventListener("click", () => {
+      document.getElementById("join-code").value = "";
+      document.getElementById("join-err").textContent = "";
+      openModal("modal-join");
+    });
+
+    document.getElementById("btn-join-confirm").addEventListener("click", async () => {
+      const code = document.getElementById("join-code").value.trim();
+      const errEl = document.getElementById("join-err");
+      errEl.textContent = "";
+      if (!code) { errEl.textContent = "請輸入邀請碼"; return; }
+      try {
+        await API.joinGroup(code);
+        closeModal("modal-join");
+        showToast("成功加入團體");
+        loadGroups();
+      } catch (e) { errEl.textContent = e.message; }
+    });
+
+    loadGroups();
+  </script>
+</body>
+</html>

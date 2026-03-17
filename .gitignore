@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Database (keep local only)
+*.db
+*.sqlite3
+
+# Secrets (never commit these)
+.env
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

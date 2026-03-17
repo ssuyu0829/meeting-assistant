@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>會議記錄 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page" style="max-width:700px">
+    <div class="breadcrumb">
+      <span onclick="history.back()">← 返回</span>
+    </div>
+    <h1 class="page-title">會議記錄</h1>
+
+    <div class="card" style="margin-bottom:1rem">
+      <p class="section-title">開會時間</p>
+      <p id="decided-time" style="font-size:0.9rem">—</p>
+    </div>
+
+    <div class="card">
+      <p class="section-title">紀錄內容</p>
+      <textarea class="form-input" id="record-text" rows="14" placeholder="在此輸入會議記錄…"></textarea>
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:0.75rem">
+      <button class="btn btn-ghost" onclick="history.back()">取消</button>
+      <button class="btn btn-primary" id="btn-save">儲存</button>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+
+    async function init() {
+      const rec = await API.getRecord(meetingId);
+      document.getElementById("decided-time").textContent = rec.decided_time || "尚未決定";
+      document.getElementById("record-text").value = rec.record_text || "";
+    }
+
+    document.getElementById("btn-save").addEventListener("click", async () => {
+      const text = document.getElementById("record-text").value;
+      await API.saveNote(meetingId, text);
+      showToast("已儲存");
+      setTimeout(() => history.back(), 700);
+    });
+
+    init();
+  </script>
+</body>
+</html>

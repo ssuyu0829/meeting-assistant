@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>出缺勤 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="breadcrumb">
+      <span onclick="history.back()">← 返回</span>
+    </div>
+    <h1 class="page-title">出缺勤</h1>
+
+    <div class="card" style="overflow-x:auto">
+      <table class="att-table" id="att-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">成員</th>
+            <th>準時</th>
+            <th>遲到</th>
+            <th>未出席</th>
+            <th style="width:2rem"></th>
+            <th>完成任務</th>
+            <th>未完成</th>
+            <th>無任務</th>
+          </tr>
+        </thead>
+        <tbody id="att-body"></tbody>
+      </table>
+    </div>
+
+    <div id="readonly-notice" style="display:none;margin-top:1rem;font-size:0.8rem;color:var(--muted)">
+      只有會議建立者可以編輯出缺勤。
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:0.75rem" id="save-row" style="display:none">
+      <button class="btn btn-ghost" onclick="history.back()">取消</button>
+      <button class="btn btn-primary" id="btn-save">儲存</button>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+
+    let isLeader = false;
+    let attData = [];
+    // state[userId] = { absence: null|'ontime'|'late'|'absent', mission: null|'done'|'undone'|'none' }
+    const state = {};
+
+    async function init() {
+      const meeting = await API.getMeeting(meetingId);
+      isLeader = meeting.is_leader;
+      attData = await API.getAttendance(meetingId);
+
+      attData.forEach(item => {
+        state[item.user_id] = {
+          absence: item.absence_status,
+          mission: item.mission_status,
+        };
+      });
+
+      renderTable();
+
+      if (isLeader) {
+        document.getElementById("save-row").style.display = "flex";
+      } else {
+        document.getElementById("readonly-notice").style.display = "block";
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("att-body");
+      tbody.innerHTML = "";
+
+      attData.forEach(item => {
+        const uid = item.user_id;
+        const tr = document.createElement("tr");
+
+        const makeRadio = (group, value, field) => {
+          const td = document.createElement("td");
+          const inp = document.createElement("input");
+          inp.type = "radio";
+          inp.name = `${group}-${uid}`;
+          inp.value = value;
+          inp.checked = state[uid][field] === value;
+          inp.disabled = !isLeader;
+          inp.style.accentColor = "var(--sage)";
+          inp.addEventListener("change", () => { state[uid][field] = value; });
+          td.appendChild(inp);
+          return td;
+        };
+
+        const nameTd = document.createElement("td");
+        nameTd.textContent = item.name;
+        tr.appendChild(nameTd);
+
+        tr.appendChild(makeRadio("absence", "ontime",  "absence"));
+        tr.appendChild(makeRadio("absence", "late",    "absence"));
+        tr.appendChild(makeRadio("absence", "absent",  "absence"));
+
+        const spacer = document.createElement("td");
+        tr.appendChild(spacer);
+
+        tr.appendChild(makeRadio("mission", "done",   "mission"));
+        tr.appendChild(makeRadio("mission", "undone", "mission"));
+        tr.appendChild(makeRadio("mission", "none",   "mission"));
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("btn-save")?.addEventListener("click", async () => {
+      const items = attData.map(item => ({
+        user_id: item.user_id,
+        absence_status: state[item.user_id].absence,
+        mission_status: state[item.user_id].mission,
+      }));
+      await API.saveAttendance(meetingId, items);
+      showToast("已儲存");
+      setTimeout(() => history.back(), 700);
+    });
+
+    init();
+  </script>
+</body>
+</html>

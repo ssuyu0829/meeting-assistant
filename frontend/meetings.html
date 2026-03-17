@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>會議列表 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="breadcrumb">
+      <span onclick="window.location.href='/groups.html'">你的團體</span>
+      <span class="sep">›</span>
+      <span id="bc-group"></span>
+    </div>
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem">
+      <h1 class="page-title" id="group-title"></h1>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="btn-info">團體資訊</button>
+        <button class="btn btn-danger btn-sm" id="btn-leave">退出團體</button>
+        <button class="btn btn-ghost" id="btn-create-folder">新增群組</button>
+        <button class="btn btn-primary" id="btn-create-meeting">新增會議</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input class="toolbar-search" type="text" id="search-input" placeholder="搜尋會議…">
+    </div>
+
+    <!-- Folders section -->
+    <div id="folders-section">
+      <p class="section-title">會議群組</p>
+      <div class="item-grid" id="folders-grid"></div>
+    </div>
+
+    <hr class="divider" id="divider" style="display:none">
+
+    <!-- Standalone meetings section -->
+    <div id="meetings-section">
+      <p class="section-title">獨立會議</p>
+      <div class="item-grid" id="meetings-grid"></div>
+    </div>
+  </main>
+
+  <!-- Group info modal -->
+  <div class="modal-overlay" id="modal-info">
+    <div class="modal">
+      <p class="modal-title">團體資訊</p>
+      <div style="font-size:0.875rem;line-height:2">
+        <span style="color:var(--muted)">邀請碼：</span><strong id="info-code"></strong><br>
+        <span style="color:var(--muted)">建立人：</span><span id="info-leader"></span>
+      </div>
+      <hr class="divider">
+      <p class="section-title">成員</p>
+      <div id="info-members" class="pill-list"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-info')">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create folder modal -->
+  <div class="modal-overlay" id="modal-folder">
+    <div class="modal">
+      <p class="modal-title">建立會議群組</p>
+      <div class="form-group">
+        <label class="form-label">群組名稱（至多6字）</label>
+        <input class="form-input" id="new-folder-name" maxlength="6">
+      </div>
+      <p style="color:var(--red-soft);font-size:0.8rem" id="folder-err"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-folder')">取消</button>
+        <button class="btn btn-primary" id="btn-folder-confirm">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create meeting modal -->
+  <div class="modal-overlay" id="modal-meeting">
+    <div class="modal" style="max-width:480px">
+      <p class="modal-title">建立新會議</p>
+      <div class="form-group">
+        <label class="form-label">會議名稱（至多8字）</label>
+        <input class="form-input" id="new-meeting-name" maxlength="8">
+      </div>
+      <div class="form-group">
+        <label class="form-label">選擇日期（可多選）</label>
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+          <input class="form-input" type="date" id="date-picker" style="flex:1">
+          <button class="btn btn-ghost btn-sm" id="btn-add-date">新增</button>
+        </div>
+        <div id="date-list" class="pill-list"></div>
+      </div>
+      <p style="color:var(--red-soft);font-size:0.8rem" id="meeting-err"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-meeting')">取消</button>
+        <button class="btn btn-primary" id="btn-meeting-confirm">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const groupId = parseInt(params.get("group"));
+    if (!groupId) window.location.href = "/groups.html";
+
+    // folder context: if ?folder=X, we're inside a folder
+    const folderId = params.get("folder") ? parseInt(params.get("folder")) : null;
+
+    let groupData = null;
+    let selectedDates = [];
+    let allItems = { folders: [], meetings: [] };
+
+    async function init() {
+      groupData = await API.getGroup(groupId);
+      document.getElementById("group-title").textContent = folderId
+        ? (localStorage.getItem("currentFolderName") || "群組")
+        : groupData.name + " 的會議";
+      document.getElementById("bc-group").textContent = groupData.name;
+
+      // hide folder controls if inside a folder
+      if (folderId) {
+        document.getElementById("btn-create-folder").style.display = "none";
+        document.getElementById("folders-section").style.display = "none";
+        document.getElementById("divider").style.display = "none";
+        document.getElementById("meetings-section").querySelector(".section-title").style.display = "none";
+      }
+
+      await loadContent();
+    }
+
+    async function loadContent() {
+      if (folderId) {
+        const meetings = await API.getFolderMeetings(folderId);
+        allItems = { folders: [], meetings };
+      } else {
+        allItems = await API.getGroupMeetings(groupId);
+      }
+      renderAll(allItems);
+    }
+
+    function renderAll(data) {
+      renderFolders(data.folders || []);
+      renderMeetings(data.meetings || []);
+
+      const hasBoth = (data.folders || []).length > 0 && (data.meetings || []).length > 0;
+      document.getElementById("divider").style.display = (!folderId && hasBoth) ? "block" : "none";
+    }
+
+    function renderFolders(folders) {
+      const grid = document.getElementById("folders-grid");
+      grid.innerHTML = "";
+      if (!folders.length) {
+        document.getElementById("folders-section").style.display = folderId ? "none" : "none";
+        return;
+      }
+      document.getElementById("folders-section").style.display = "block";
+      folders.forEach(f => {
+        const card = document.createElement("div");
+        card.className = "item-card";
+        card.innerHTML = `
+          <div class="item-card-name">📁 ${f.name}</div>
+          <div class="item-card-meta">${f.meeting_count} 個會議</div>
+        `;
+        card.addEventListener("click", () => {
+          localStorage.setItem("currentFolderName", f.name);
+          window.location.href = `/meetings.html?group=${groupId}&folder=${f.id}`;
+        });
+        grid.appendChild(card);
+      });
+    }
+
+    function renderMeetings(meetings) {
+      const grid = document.getElementById("meetings-grid");
+      grid.innerHTML = "";
+      if (!meetings.length) {
+        document.getElementById("meetings-section").style.display = "none";
+        return;
+      }
+      document.getElementById("meetings-section").style.display = "block";
+      meetings.forEach(m => {
+        const card = document.createElement("div");
+        card.className = "item-card" + (m.status === "finished" ? " finished" : "");
+        card.innerHTML = `
+          <div class="item-card-name">${m.name}</div>
+          <div class="item-card-meta">${m.dates.length} 個日期</div>
+          <div class="item-card-badge ${m.status === 'finished' ? 'finished' : ''}">${m.status === 'finished' ? '已結束' : '進行中'}</div>
+        `;
+        card.addEventListener("click", () => {
+          localStorage.setItem("currentMeeting", JSON.stringify(m));
+          window.location.href = `/meeting.html?id=${m.id}`;
+        });
+        grid.appendChild(card);
+      });
+    }
+
+    // search
+    document.getElementById("search-input").addEventListener("input", e => {
+      const q = e.target.value.trim().toLowerCase();
+      renderAll({
+        folders: allItems.folders.filter(f => f.name.toLowerCase().includes(q)),
+        meetings: allItems.meetings.filter(m => m.name.toLowerCase().includes(q)),
+      });
+    });
+
+    // group info
+    document.getElementById("btn-info").addEventListener("click", async () => {
+      const g = await API.getGroup(groupId);
+      document.getElementById("info-code").textContent = g.invitation_code;
+      const leader = g.members.find(m => m.role === "leader");
+      document.getElementById("info-leader").textContent = leader ? leader.name : "-";
+      const membersEl = document.getElementById("info-members");
+      membersEl.innerHTML = g.members.map(m =>
+        `<span class="pill">${m.name}</span>`
+      ).join("");
+      openModal("modal-info");
+    });
+
+    // leave group
+    document.getElementById("btn-leave").addEventListener("click", async () => {
+      if (!confirm(`確定要退出 ${groupData?.name}？`)) return;
+      await API.leaveGroup(groupId);
+      showToast("已退出團體");
+      setTimeout(() => window.location.href = "/groups.html", 800);
+    });
+
+    // create folder
+    document.getElementById("btn-create-folder").addEventListener("click", () => {
+      document.getElementById("new-folder-name").value = "";
+      document.getElementById("folder-err").textContent = "";
+      openModal("modal-folder");
+    });
+    document.getElementById("btn-folder-confirm").addEventListener("click", async () => {
+      const name = document.getElementById("new-folder-name").value.trim();
+      const errEl = document.getElementById("folder-err");
+      errEl.textContent = "";
+      if (!name) { errEl.textContent = "請輸入群組名稱"; return; }
+      try {
+        await API.createFolder(name, groupId);
+        closeModal("modal-folder");
+        showToast("群組建立成功");
+        loadContent();
+      } catch (e) { errEl.textContent = e.message; }
+    });
+
+    // create meeting — date picker
+    document.getElementById("btn-create-meeting").addEventListener("click", () => {
+      document.getElementById("new-meeting-name").value = "";
+      document.getElementById("meeting-err").textContent = "";
+      selectedDates = [];
+      renderDateList();
+      // set min date to today
+      document.getElementById("date-picker").min = new Date().toISOString().slice(0, 10);
+      openModal("modal-meeting");
+    });
+
+    document.getElementById("btn-add-date").addEventListener("click", () => {
+      const raw = document.getElementById("date-picker").value;
+      if (!raw) return;
+      // convert YYYY-MM-DD → YYYY/MM/DD
+      const date = raw.replace(/-/g, "/");
+      if (selectedDates.includes(date)) { showToast("日期已選擇"); return; }
+      selectedDates.push(date);
+      selectedDates.sort();
+      renderDateList();
+    });
+
+    function renderDateList() {
+      const el = document.getElementById("date-list");
+      el.innerHTML = selectedDates.map((d, i) =>
+        `<span class="pill" style="cursor:pointer" title="點擊移除" data-i="${i}">
+          ${d} ✕
+        </span>`
+      ).join("");
+      el.querySelectorAll(".pill").forEach(pill => {
+        pill.addEventListener("click", () => {
+          selectedDates.splice(parseInt(pill.dataset.i), 1);
+          renderDateList();
+        });
+      });
+    }
+
+    document.getElementById("btn-meeting-confirm").addEventListener("click", async () => {
+      const name = document.getElementById("new-meeting-name").value.trim();
+      const errEl = document.getElementById("meeting-err");
+      errEl.textContent = "";
+      if (!name) { errEl.textContent = "請輸入會議名稱"; return; }
+      if (!selectedDates.length) { errEl.textContent = "請至少選擇一個日期"; return; }
+      try {
+        await API.createMeeting({
+          name,
+          group_id: groupId,
+          folder_id: folderId || null,
+          dates: selectedDates,
+        });
+        closeModal("modal-meeting");
+        showToast("會議建立成功");
+        loadContent();
+      } catch (e) { errEl.textContent = e.message; }
+    });
+
+    // breadcrumb back if in folder
+    if (folderId) {
+      document.getElementById("bc-group").addEventListener("click", () => {
+        window.location.href = `/meetings.html?group=${groupId}`;
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

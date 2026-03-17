@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .auth-wrap {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    }
+    .auth-card { width: 100%; max-width: 380px; }
+    .auth-logo {
+      text-align: center; margin-bottom: 2rem;
+      font-size: 1.3rem; font-weight: 500; letter-spacing: 0.1em; color: var(--taupe);
+    }
+    .auth-logo .sub { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.15em; margin-top: 0.2rem; }
+    .tab-row { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+    .tab {
+      flex: 1; text-align: center; padding: 0.65rem;
+      font-size: 0.875rem; cursor: pointer; color: var(--muted);
+      border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+    }
+    .tab.active { color: var(--text); border-bottom-color: var(--taupe); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .err { color: var(--red-soft); font-size: 0.8rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card card">
+      <div class="auth-logo">
+        開會小助手
+        <div class="sub">MEETING ASSISTANT</div>
+      </div>
+
+      <div class="tab-row">
+        <div class="tab active" data-tab="login">登入</div>
+        <div class="tab" data-tab="register">註冊</div>
+      </div>
+
+      <!-- Login -->
+      <div class="tab-panel active" id="panel-login">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-input" type="email" id="login-email" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">密碼</label>
+          <input class="form-input" type="password" id="login-password" placeholder="••••••••">
+        </div>
+        <p class="err" id="login-err"></p>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:0.5rem"
+                id="btn-login">登入</button>
+      </div>
+
+      <!-- Register -->
+      <div class="tab-panel" id="panel-register">
+        <div class="form-group">
+          <label class="form-label">名字</label>
+          <input class="form-input" type="text" id="reg-name" placeholder="您的名字">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-input" type="email" id="reg-email" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">密碼</label>
+          <input class="form-input" type="password" id="reg-password" placeholder="至少6個字元">
+        </div>
+        <p class="err" id="reg-err"></p>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:0.5rem"
+                id="btn-register">註冊</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    // redirect if already logged in
+    if (getToken()) window.location.href = "/groups.html";
+
+    // tabs
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab, .tab-panel").forEach(el => el.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+      });
+    });
+
+    // login
+    document.getElementById("btn-login").addEventListener("click", async () => {
+      const email    = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+      const errEl    = document.getElementById("login-err");
+      errEl.textContent = "";
+      try {
+        const data = await API.login(email, password);
+        saveAuth(data);
+        window.location.href = "/groups.html";
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    });
+
+    // clear errors while typing
+    ["reg-name","reg-email","reg-password"].forEach(id => {
+      document.getElementById(id).addEventListener("input", () => {
+        document.getElementById("reg-err").textContent = "";
+      });
+    });
+    ["login-email","login-password"].forEach(id => {
+      document.getElementById(id).addEventListener("input", () => {
+        document.getElementById("login-err").textContent = "";
+      });
+    });
+
+    // register
+    document.getElementById("btn-register").addEventListener("click", async () => {
+      const name     = document.getElementById("reg-name").value.trim();
+      const email    = document.getElementById("reg-email").value.trim();
+      const password = document.getElementById("reg-password").value;
+      const errEl    = document.getElementById("reg-err");
+      errEl.textContent = "";
+      if (!name) { errEl.textContent = "請輸入名字"; return; }
+      if (!password) { errEl.textContent = "請輸入密碼"; return; }
+      try {
+        const data = await API.register(email, name, password);
+        saveAuth(data);
+        window.location.href = "/groups.html";
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    });
+
+    // enter key
+    document.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      const panel = document.querySelector(".tab-panel.active").id;
+      if (panel === "panel-login") document.getElementById("btn-login").click();
+      else document.getElementById("btn-register").click();
+    });
+  </script>
+</body>
+</html>

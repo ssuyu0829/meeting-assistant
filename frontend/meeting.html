@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>會議 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .action-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem; }
+    .action-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.25rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .action-item:hover { border-color: var(--taupe); box-shadow: var(--shadow); }
+    .action-item-label { font-weight: 500; }
+    .action-item-desc { font-size: 0.8rem; color: var(--muted); margin-top: 0.1rem; }
+    .action-arrow { color: var(--muted); font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page" style="max-width:600px">
+    <div class="breadcrumb" id="breadcrumb"></div>
+
+    <h1 class="page-title" id="meeting-name"></h1>
+    <p class="page-subtitle" id="meeting-dates"></p>
+
+    <div id="active-view">
+      <div class="action-list">
+        <div class="action-item" id="action-avail">
+          <div>
+            <div class="action-item-label">新增你的時間</div>
+            <div class="action-item-desc">填寫你方便的時段</div>
+          </div>
+          <span class="action-arrow">›</span>
+        </div>
+        <div class="action-item" id="action-view">
+          <div>
+            <div class="action-item-label">查看所有人的時間</div>
+            <div class="action-item-desc">查看可用度熱力圖</div>
+          </div>
+          <span class="action-arrow">›</span>
+        </div>
+        <div class="action-item" id="action-record">
+          <div>
+            <div class="action-item-label">紀錄會議</div>
+            <div class="action-item-desc">出缺勤、會議記錄</div>
+          </div>
+          <span class="action-arrow">›</span>
+        </div>
+      </div>
+
+      <div id="leader-actions" style="margin-top:1.5rem;display:none">
+        <hr class="divider">
+        <button class="btn btn-danger" id="btn-finish">結束會議</button>
+      </div>
+    </div>
+
+    <!-- Finished view -->
+    <div id="finished-view" style="display:none">
+      <div class="card" style="margin-top:1rem;text-align:center;padding:2rem">
+        <p style="color:var(--muted);font-size:0.85rem;letter-spacing:0.08em">MEETING ENDED</p>
+        <p style="margin-top:0.5rem;font-size:1rem">此會議已結束</p>
+      </div>
+      <div style="margin-top:1rem">
+        <button class="btn btn-ghost" id="btn-to-summary">查看結果摘要 ›</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+    if (!meetingId) window.location.href = "/groups.html";
+
+    let meeting = null;
+
+    async function init() {
+      meeting = await API.getMeeting(meetingId);
+      document.getElementById("meeting-name").textContent = meeting.name;
+      document.getElementById("meeting-dates").textContent =
+        meeting.dates.join("  ·  ");
+
+      // breadcrumb
+      const g = JSON.parse(localStorage.getItem("currentGroup") || "{}");
+      const bc = document.getElementById("breadcrumb");
+      bc.innerHTML = `
+        <span onclick="window.location.href='/groups.html'">你的團體</span>
+        <span class="sep">›</span>
+        <span onclick="history.back()">${g.name || "團體"}</span>
+        <span class="sep">›</span>
+        <span>${meeting.name}</span>
+      `;
+
+      if (meeting.status === "finished") {
+        document.getElementById("active-view").style.display = "none";
+        document.getElementById("finished-view").style.display = "block";
+      } else {
+        if (meeting.is_leader) {
+          document.getElementById("leader-actions").style.display = "block";
+        }
+      }
+    }
+
+    document.getElementById("action-avail").addEventListener("click", () => {
+      window.location.href = `/availability.html?id=${meetingId}`;
+    });
+    document.getElementById("action-view").addEventListener("click", () => {
+      window.location.href = `/heatmap.html?id=${meetingId}`;
+    });
+    document.getElementById("action-record").addEventListener("click", () => {
+      window.location.href = `/record.html?id=${meetingId}`;
+    });
+    document.getElementById("btn-to-summary")?.addEventListener("click", () => {
+      window.location.href = `/summary.html?id=${meetingId}`;
+    });
+
+    document.getElementById("btn-finish")?.addEventListener("click", async () => {
+      if (!confirm("結束會議後將無法修改，確定嗎？")) return;
+      await API.finishMeeting(meetingId);
+      showToast("會議已結束");
+      setTimeout(() => window.location.href = `/summary.html?id=${meetingId}`, 800);
+    });
+
+    init();
+  </script>
+</body>
+</html>

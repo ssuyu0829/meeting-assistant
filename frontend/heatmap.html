@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>查看時間 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .info-panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem;
+      min-width: 180px; font-size: 0.85rem;
+    }
+    .info-panel-title { font-size: 0.7rem; letter-spacing:0.1em; color: var(--muted); margin-bottom: 0.5rem; }
+    .legend-row { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; font-size:0.78rem; color:var(--muted); }
+    .legend-box { width:16px;height:16px; border:1px solid var(--border); border-radius:2px; }
+    .layout { display:flex; gap:1.5rem; flex-wrap:wrap; align-items:flex-start; }
+    .decide-form { display:flex; flex-direction:column; gap:0.75rem; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="breadcrumb">
+      <span onclick="history.back()">← 返回</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem">
+      <h1 class="page-title">查看所有人的時間</h1>
+      <button class="btn btn-primary" id="btn-decide" style="display:none">決定開會時間</button>
+    </div>
+
+    <div class="legend-row">
+      <div class="legend-box heat-0"></div>0人
+      <div class="legend-box heat-2"></div>少
+      <div class="legend-box heat-5"></div>中
+      <div class="legend-box heat-8plus"></div>多
+    </div>
+
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem" id="submitted-info"></p>
+
+    <div class="layout">
+      <div class="avail-wrap card" style="padding:1rem;flex:1;min-width:0">
+        <table class="avail-table" id="heat-table">
+          <thead><tr id="heat-header"></tr></thead>
+          <tbody id="heat-body"></tbody>
+        </table>
+      </div>
+
+      <div class="info-panel">
+        <p class="info-panel-title">點擊時段查看</p>
+        <p style="color:var(--muted);font-size:0.8rem" id="slot-info-placeholder">點擊格子查看誰可以</p>
+        <div id="slot-info" style="display:none">
+          <p style="font-size:0.75rem;color:var(--sage);margin-bottom:0.3rem">可以</p>
+          <div id="slot-available" class="pill-list"></div>
+          <p style="font-size:0.75rem;color:var(--red-soft);margin-top:0.75rem;margin-bottom:0.3rem">不可以</p>
+          <div id="slot-unavailable" class="pill-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem">
+      <button class="btn btn-ghost" onclick="history.back()">返回</button>
+    </div>
+  </main>
+
+  <!-- Decide time modal -->
+  <div class="modal-overlay" id="modal-decide">
+    <div class="modal">
+      <p class="modal-title">決定開會時間</p>
+      <div id="already-decided" style="display:none">
+        <p style="font-size:0.875rem">已決定時間：</p>
+        <p style="font-size:1rem;font-weight:500;margin-top:0.5rem" id="decided-display"></p>
+        <hr class="divider">
+        <p style="font-size:0.8rem;color:var(--muted)">備忘錄</p>
+        <p style="font-size:0.875rem;margin-top:0.3rem;white-space:pre-wrap" id="decided-notes"></p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal('modal-decide')">關閉</button>
+        </div>
+      </div>
+      <div id="decide-form-wrap">
+        <div class="decide-form">
+          <div class="form-group">
+            <label class="form-label">日期</label>
+            <select class="form-input" id="decide-date"></select>
+          </div>
+          <div style="display:flex;gap:0.5rem">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">開始時間</label>
+              <select class="form-input" id="decide-start"></select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label">結束時間</label>
+              <select class="form-input" id="decide-end"></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">備忘錄</label>
+            <textarea class="form-input" id="decide-notes" rows="4" placeholder="會議備忘…"></textarea>
+          </div>
+          <p style="color:var(--red-soft);font-size:0.8rem" id="decide-err"></p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal('modal-decide')">取消</button>
+          <button class="btn btn-primary" id="btn-decide-confirm">確認並發送通知</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+
+    let avData = null;
+    const TIMES = Array.from({length: 17}, (_, i) => `${7+i}:00`);
+
+    async function init() {
+      avData = await API.getAvailability(meetingId);
+      const meeting = await API.getMeeting(meetingId);
+
+      document.getElementById("submitted-info").textContent =
+        `已有 ${avData.submitted_members.length} 人填寫時間：${avData.submitted_members.join("、") || "—"}`;
+
+      if (meeting.is_leader && meeting.status === "unfinished") {
+        document.getElementById("btn-decide").style.display = "block";
+      }
+
+      buildHeatmap();
+      populateDecideForm();
+    }
+
+    function heatClass(count) {
+      if (count === 0) return "heat-0";
+      if (count === 1) return "heat-1";
+      if (count === 2) return "heat-2";
+      if (count === 3) return "heat-3";
+      if (count === 4) return "heat-4";
+      if (count === 5) return "heat-5";
+      if (count === 6) return "heat-6";
+      if (count === 7) return "heat-7";
+      return "heat-8plus";
+    }
+
+    function buildHeatmap() {
+      const { dates, hour_slots, grid } = avData;
+
+      const header = document.getElementById("heat-header");
+      header.innerHTML = `<th style="width:110px"></th>`;
+      dates.forEach(d => {
+        const th = document.createElement("th"); th.textContent = d.slice(5); header.appendChild(th);
+      });
+
+      const tbody = document.getElementById("heat-body");
+      tbody.innerHTML = "";
+      hour_slots.forEach((label, si) => {
+        const tr = document.createElement("tr");
+        const timeTd = document.createElement("td");
+        timeTd.className = "time-label"; timeTd.textContent = label; tr.appendChild(timeTd);
+
+        dates.forEach(date => {
+          const names = grid[date]?.[si] || [];
+          const td = document.createElement("td");
+          td.className = heatClass(names.length);
+          td.style.cursor = "pointer";
+          td.title = names.length > 0 ? names.join(", ") : "無人";
+          if (names.length > 0) {
+            td.textContent = names.length;
+            td.style.fontSize = "0.7rem";
+          }
+          td.addEventListener("click", () => showSlotInfo(date, si, names));
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function showSlotInfo(date, slotIdx, availableNames) {
+      const allMembers = avData.submitted_members;
+      const unavailable = allMembers.filter(n => !availableNames.includes(n));
+
+      document.getElementById("slot-info-placeholder").style.display = "none";
+      document.getElementById("slot-info").style.display = "block";
+
+      document.getElementById("slot-available").innerHTML =
+        availableNames.length ? availableNames.map(n => `<span class="pill available">${n}</span>`).join("") : "<span style='color:var(--muted);font-size:0.8rem'>無</span>";
+      document.getElementById("slot-unavailable").innerHTML =
+        unavailable.length ? unavailable.map(n => `<span class="pill unavailable">${n}</span>`).join("") : "<span style='color:var(--muted);font-size:0.8rem'>無</span>";
+    }
+
+    function populateDecideForm() {
+      const dateSelect = document.getElementById("decide-date");
+      avData.dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; dateSelect.appendChild(o); });
+      const startSel = document.getElementById("decide-start");
+      const endSel = document.getElementById("decide-end");
+      TIMES.forEach(t => {
+        const o1 = document.createElement("option"); o1.value = t; o1.textContent = t; startSel.appendChild(o1);
+        const o2 = document.createElement("option"); o2.value = t; o2.textContent = t; endSel.appendChild(o2);
+      });
+      endSel.selectedIndex = 1;
+    }
+
+    document.getElementById("btn-decide").addEventListener("click", async () => {
+      const rec = await API.getRecord(meetingId);
+      if (rec.time_decided) {
+        document.getElementById("decided-display").textContent = rec.decided_time;
+        document.getElementById("decided-notes").textContent = rec.notes || "—";
+        document.getElementById("already-decided").style.display = "block";
+        document.getElementById("decide-form-wrap").style.display = "none";
+      } else {
+        document.getElementById("already-decided").style.display = "none";
+        document.getElementById("decide-form-wrap").style.display = "block";
+        document.getElementById("decide-notes").value = "";
+      }
+      openModal("modal-decide");
+    });
+
+    document.getElementById("btn-decide-confirm").addEventListener("click", async () => {
+      const date  = document.getElementById("decide-date").value;
+      const start = document.getElementById("decide-start").value;
+      const end   = document.getElementById("decide-end").value;
+      const notes = document.getElementById("decide-notes").value;
+      const errEl = document.getElementById("decide-err");
+      errEl.textContent = "";
+
+      if (start >= end) { errEl.textContent = "結束時間必須晚於開始時間"; return; }
+
+      try {
+        await API.decideTime(meetingId, { date, start_time: start, end_time: end, notes });
+        closeModal("modal-decide");
+        showToast("已決定時間並發送通知");
+      } catch (e) { errEl.textContent = e.message; }
+    });
+
+    init();
+  </script>
+</body>
+</html>

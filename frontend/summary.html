@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>會議摘要 — 開會小助手</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .summary-meta { display:flex; flex-wrap:wrap; gap:1.5rem; margin-bottom:1.5rem; }
+    .summary-meta-item { font-size:0.875rem; }
+    .summary-meta-item .label { color:var(--muted); font-size:0.75rem; letter-spacing:0.06em; margin-bottom:0.2rem; }
+    .chart-row { display:flex; gap:1.5rem; flex-wrap:wrap; }
+    .chart-box { flex:1; min-width:200px; max-width:280px; }
+    .lists-row { display:flex; gap:1.5rem; flex-wrap:wrap; margin-top:1.5rem; }
+    .list-group { flex:1; min-width:140px; }
+    .list-group-title { font-size:0.7rem; letter-spacing:0.1em; color:var(--muted); margin-bottom:0.5rem; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="topbar-title">開會小助手</span>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="breadcrumb">
+      <span onclick="history.back()">← 返回</span>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.5rem">
+      <h1 class="page-title" style="margin:0" id="summary-title"></h1>
+      <span class="item-card-badge finished">已結束</span>
+    </div>
+
+    <!-- Meta -->
+    <div class="summary-meta">
+      <div class="summary-meta-item">
+        <div class="label">開會時間</div>
+        <div id="meta-time">—</div>
+      </div>
+    </div>
+
+    <!-- Meeting record -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <p class="section-title">會議記錄</p>
+      <p id="record-text" style="font-size:0.875rem;white-space:pre-wrap;color:var(--text)">—</p>
+    </div>
+
+    <!-- Charts -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <p class="section-title">出缺勤</p>
+      <div class="chart-row">
+        <div class="chart-box"><canvas id="chart-absence"></canvas></div>
+        <div class="lists-row" style="flex:1">
+          <div class="list-group">
+            <div class="list-group-title">準時</div>
+            <div id="list-ontime" class="pill-list"></div>
+          </div>
+          <div class="list-group">
+            <div class="list-group-title">遲到</div>
+            <div id="list-late" class="pill-list"></div>
+          </div>
+          <div class="list-group">
+            <div class="list-group-title">未出席</div>
+            <div id="list-absent" class="pill-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem">
+      <p class="section-title">任務完成</p>
+      <div class="chart-row">
+        <div class="chart-box"><canvas id="chart-mission"></canvas></div>
+        <div class="lists-row" style="flex:1">
+          <div class="list-group">
+            <div class="list-group-title">完成任務</div>
+            <div id="list-done" class="pill-list"></div>
+          </div>
+          <div class="list-group">
+            <div class="list-group-title">未完成</div>
+            <div id="list-undone" class="pill-list"></div>
+          </div>
+          <div class="list-group">
+            <div class="list-group-title">無任務</div>
+            <div id="list-none" class="pill-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-ghost" onclick="history.back()">返回</button>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    requireAuth();
+    initTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const meetingId = parseInt(params.get("id"));
+
+    const MORANDI = ["#9BAF9F", "#B8A99A", "#A8B4C0", "#C8B98A", "#C4837A", "#8A9BAF"];
+
+    function makePieChart(canvasId, labels, values) {
+      const canvas = document.getElementById(canvasId);
+      const nonzero = labels.map((l, i) => ({ l, v: values[i] })).filter(x => x.v > 0);
+      if (!nonzero.length) {
+        canvas.parentElement.innerHTML = `<p style="color:var(--muted);font-size:0.8rem;padding:1rem">無資料</p>`;
+        return;
+      }
+      new Chart(canvas, {
+        type: "pie",
+        data: {
+          labels: nonzero.map(x => x.l),
+          datasets: [{ data: nonzero.map(x => x.v), backgroundColor: MORANDI, borderWidth: 0 }],
+        },
+        options: {
+          plugins: {
+            legend: { position: "bottom", labels: { font: { size: 11 }, boxWidth: 12 } },
+          },
+        },
+      });
+    }
+
+    function fillPills(elId, names) {
+      const el = document.getElementById(elId);
+      el.innerHTML = names.length
+        ? names.map(n => `<span class="pill">${n}</span>`).join("")
+        : `<span style="color:var(--muted);font-size:0.8rem">—</span>`;
+    }
+
+    async function init() {
+      const s = await API.getSummary(meetingId);
+
+      document.getElementById("summary-title").textContent = s.meeting_name;
+      document.getElementById("meta-time").textContent = s.decided_time || "—";
+      document.getElementById("record-text").textContent = s.record_text || "—";
+
+      makePieChart("chart-absence", ["準時","遲到","未出席"], [s.ontime.length, s.late.length, s.absent.length]);
+      makePieChart("chart-mission", ["完成任務","未完成任務","無任務"], [s.done.length, s.undone.length, s.none_task.length]);
+
+      fillPills("list-ontime",  s.ontime);
+      fillPills("list-late",    s.late);
+      fillPills("list-absent",  s.absent);
+      fillPills("list-done",    s.done);
+      fillPills("list-undone",  s.undone);
+      fillPills("list-none",    s.none_task);
+    }
+
+    init();
+  </script>
+</body>
+</html>
