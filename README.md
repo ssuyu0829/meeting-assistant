@@ -1,0 +1,197 @@
+# 開會小助手 (Meeting Assistant)
+
+> 日式極簡風格的線上會議排程與紀錄工具
+
+---
+
+## 一、網站網址
+
+**正式網址：** https://meeting-assistant-k765.onrender.com
+
+> **注意事項**
+> - 使用 Render 免費方案，閒置 15 分鐘後會自動休眠
+> - 第一次開啟需等待約 50 秒喚醒，之後瀏覽速度正常
+> - 資料儲存在 Supabase，休眠不影響資料安全
+
+---
+
+## 二、網站功能
+
+### 1. 帳號系統
+- 使用者註冊 / 登入（Email + 密碼）
+- JWT Token 身份驗證，登入狀態保持 7 天
+
+### 2. 群組管理
+- 建立群組（擔任 Leader）
+- 透過邀請碼加入群組
+- 查看群組成員清單
+- 離開群組
+
+### 3. 資料夾與會議管理
+- 在群組內建立資料夾，分類整理會議
+- 建立會議，設定多個候選日期
+- 將會議標記為「已結束」
+
+### 4. 時間填寫（可用時段調查）
+- 每位成員填寫自己在各候選日期的可用時段（早上 7 點～晚上 11 點，共 16 個時段）
+- 即時查看哪個時段最多人有空
+
+### 5. 熱力圖（Heatmap）
+- 以視覺化方式呈現各日期 × 時段的出席人數
+- 幫助快速找出最佳會議時間
+
+### 6. 確認開會時間 + 發送 Email 通知
+- Leader 決定最終開會時間後，自動寄送通知 Email 給所有群組成員
+
+### 7. 出席紀錄
+- 記錄每位成員出席狀態：準時 / 遲到 / 缺席
+- 記錄任務完成狀態：完成 / 未完成
+
+### 8. 會議紀錄
+- 填寫會議筆記
+- 新增補充備注
+
+### 9. 會議總結
+- 統計出席率與任務完成率
+- 以圓餅圖（Chart.js）視覺化呈現結果
+
+---
+
+## 三、使用的工具與技術
+
+### 後端
+| 套件 | 用途 |
+|------|------|
+| Python 3.11.9 | 主要程式語言 |
+| FastAPI | 建立 REST API 伺服器 |
+| SQLAlchemy | ORM 資料庫操作 |
+| Alembic | 資料庫版本控制（migration）|
+| python-jose | JWT Token 產生與驗證 |
+| passlib + bcrypt | 密碼加密（bcrypt + SHA-256 預雜湊）|
+| python-multipart | 表單資料解析 |
+| python-dotenv | 讀取環境變數（.env 檔）|
+| Resend | 發送通知 Email 的 API 服務 |
+
+### 資料庫
+- **本地開發：** SQLite
+- **正式部署：** PostgreSQL（由 Supabase 託管）
+- psycopg2-binary — Python 連接 PostgreSQL 的驅動程式
+- Supabase Connection Pooler（Session Pooler，port 5432）— 解決 Render 免費方案無法直連 Supabase 的網路問題
+
+### 前端
+- 純 HTML / CSS / JavaScript（無框架）
+- Chart.js — 繪製圓餅圖（出席率、任務完成率）
+- Fetch API — 與後端 API 溝通
+- **設計風格：** 無印良品 / 日式極簡，莫蘭迪色系
+  - 主色：`#F5F0EB` 米白、`#B8A99A` 暖棕、`#9BAF9F` 鼠尾草綠、`#A8B4C0` 霧藍
+
+### 部署與版本控制
+- **GitHub** — 原始碼管理：https://github.com/ssuyu0829/meeting-assistant
+- **Render** — 雲端部署平台（免費方案），自動偵測 GitHub 推送並重新部署
+- **Claude Code** — AI 輔助開發，負責程式撰寫與除錯
+
+---
+
+## 四、GitHub 原始碼結構與各檔案說明
+
+```
+meeting-assistant/
+│
+├── render.yaml                 部署設定檔，告訴 Render 如何建置與啟動服務
+├── .python-version             指定 Python 版本為 3.11.9（避免 Render 使用不相容的新版本）
+├── .gitignore                  排除不上傳的檔案（.env、資料庫、虛擬環境等）
+│
+├── backend/
+│   ├── requirements.txt        列出所有 Python 套件及版本，Render 安裝時使用
+│   ├── main.py                 程式進入點：啟動 FastAPI、載入所有路由、提供前端靜態檔案
+│   ├── database.py             資料庫連線設定：建立 SQLAlchemy 引擎與 Session
+│   ├── models.py               定義所有資料庫表格（User、Group、Meeting 等 9 個資料表）
+│   ├── auth.py                 身份驗證邏輯：密碼雜湊、JWT Token 產生與驗證
+│   │
+│   └── routers/                API 路由（依功能分檔）
+│       ├── auth.py             註冊、登入 API（/api/register、/api/login）
+│       ├── groups.py           群組 API（建立、加入、查詢、離開群組）
+│       ├── meetings.py         會議 API（建立資料夾、建立會議、查詢、結束會議）
+│       ├── availability.py     時間填寫 API（提交可用時段、查詢熱力圖資料）
+│       └── records.py          紀錄 API（出席狀態、會議筆記、確認時間、發送 Email、總結）
+│
+└── frontend/
+    ├── index.html              登入 / 註冊頁面
+    ├── groups.html             群組列表頁面
+    ├── meetings.html           群組內會議與資料夾列表
+    ├── meeting.html            單一會議首頁（顯示候選日期與成員填寫狀態）
+    ├── availability.html       填寫個人可用時段頁面
+    ├── heatmap.html            熱力圖頁面（視覺化呈現最佳時段）
+    ├── record.html             會議紀錄首頁（顯示決定時間、筆記入口）
+    ├── attendance.html         出席狀態記錄頁面
+    ├── notes.html              填寫會議筆記與備注頁面
+    ├── summary.html            會議總結頁面（出席率與任務完成率圓餅圖）
+    │
+    └── static/
+        ├── css/
+        │   └── style.css       全站 CSS 樣式（莫蘭迪色系設計系統）
+        └── js/
+            └── api.js          前端 API 工具（所有與後端溝通的函式、Token 管理、Toast 通知）
+```
+
+---
+
+## 五、環境變數說明
+
+這些變數儲存在 Render 的 Environment 設定中，**絕對不能上傳到 GitHub**。
+
+| 變數名稱 | 用途 |
+|----------|------|
+| `DATABASE_URL` | PostgreSQL 連線字串（Supabase Session Pooler）格式：`postgresql://postgres.[REF]:[PASSWORD]@[HOST]:5432/postgres` |
+| `SECRET_KEY` | JWT Token 簽名密鑰（任意長字串），需保密 |
+| `RESEND_API_KEY` | Resend 服務的 API 金鑰，用於發送通知 Email |
+| `FROM_EMAIL` | 通知 Email 的寄件人地址，例如 `noreply@yourdomain.com` |
+
+> 本地開發時，在 `backend/` 資料夾建立 `.env` 檔案並填入上述變數。`.env` 已加入 `.gitignore`，不會被上傳到 GitHub。
+
+---
+
+## 六、本地開發步驟
+
+```bash
+# 1. 進入後端目錄
+cd meeting-assistant/backend
+
+# 2. 建立虛擬環境並安裝套件
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. 建立 .env 檔案（DATABASE_URL 留空則使用本地 SQLite）
+SECRET_KEY=any-random-secret-string
+RESEND_API_KEY=（選填）
+FROM_EMAIL=（選填）
+
+# 4. 啟動後端伺服器
+uvicorn main:app --reload
+
+# 5. 開啟瀏覽器
+# http://localhost:8000
+```
+
+修改程式碼後，伺服器會自動重載（`--reload` 模式）。
+
+---
+
+## 七、更新部署流程
+
+每次新增或修改功能後，只需三個步驟即可發布到線上：
+
+```bash
+# 步驟 1：完成程式碼修改後，推送到 GitHub
+git add .
+git commit -m "描述這次的更新內容"
+git push
+```
+
+**步驟 2：** Render 自動偵測到新 commit，開始重新建置（約 2～3 分鐘）
+
+**步驟 3：** 部署完成，線上版本即更新為最新功能
+- 可在 Render Dashboard → Events 查看部署進度
+
+> **注意：** 若只修改了 Render Environment 環境變數，需手動點擊 **Manual Deploy** 才會生效。
