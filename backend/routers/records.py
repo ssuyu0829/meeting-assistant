@@ -1,6 +1,7 @@
+import logging
 import os
 import resend
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional, Dict
@@ -9,6 +10,7 @@ from auth import get_current_user
 import models
 
 router = APIRouter(prefix="/api/records", tags=["records"])
+logger = logging.getLogger(__name__)
 
 
 class AttendanceItem(BaseModel):
@@ -86,6 +88,7 @@ def save_note(
 def decide_time(
     meeting_id: int,
     body: DecideTimeRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -104,8 +107,14 @@ def decide_time(
     record.notes = body.notes
     db.commit()
 
-    # Send email notifications
-    _send_notification_emails(meeting, decided_time, body.notes, db)
+    # 收件人在這裡查（還有 db），實際寄信丟到背景
+    background_tasks.add_task(
+        _send_notification_emails,
+        _member_emails(meeting.group_id, db),
+        meeting.name,
+        decided_time,
+        body.notes,
+    )
 
     return {"ok": True}
 
@@ -224,28 +233,37 @@ def _require_record(meeting_id: int, user_id: int, db: Session) -> models.Meetin
     return meeting.record
 
 
-def _send_notification_emails(meeting: models.Meeting, decided_time: str, notes: str, db: Session):
+def _member_emails(group_id: int, db: Session) -> List[str]:
+    """一次撈齊收件人。在 request 內先查好，背景工作就不必碰已經關掉的 db session。"""
+    rows = (
+        db.query(models.User.email)
+        .join(models.GroupMember, models.GroupMember.user_id == models.User.id)
+        .filter(models.GroupMember.group_id == group_id)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def _send_notification_emails(recipients: List[str], meeting_name: str, decided_time: str, notes: str):
+    """在背景執行：寄信慢，放進 request 裡會讓使用者等整批往返。"""
     api_key = os.getenv("RESEND_API_KEY")
     from_email = os.getenv("FROM_EMAIL", "onboarding@resend.dev")
     if not api_key:
-        return  # skip if not configured
+        logger.info("RESEND_API_KEY 沒設，略過寄信")
+        return
 
     resend.api_key = api_key
-    memberships = db.query(models.GroupMember).filter_by(group_id=meeting.group_id).all()
-
-    for m in memberships:
-        user = db.get(models.User, m.user_id)
-        if not user:
-            continue
+    for email in recipients:
         try:
             resend.Emails.send({
                 "from": f"Meeting Assistant <{from_email}>",
-                "to": [user.email],
-                "subject": f"{meeting.name} 開會時間通知",
+                "to": [email],
+                "subject": f"{meeting_name} 開會時間通知",
                 "text": (
-                    f"{meeting.name} 的開會時間為：\n{decided_time}\n\n"
+                    f"{meeting_name} 的開會時間為：\n{decided_time}\n\n"
                     f"備忘錄內容如下:\n{notes}"
                 ),
             })
         except Exception:
-            pass  # don't fail the request if email fails
+            # 寄信失敗不影響已經存好的會議時間，但一定要留下紀錄，否則線上查不到為什麼沒收到信
+            logger.exception("寄送開會通知失敗：%s", email)

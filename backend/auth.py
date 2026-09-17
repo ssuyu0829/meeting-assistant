@@ -1,6 +1,6 @@
 import os
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models
 
-SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production-please")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    # 沒有預設值是刻意的：一旦用寫死在公開原始碼裡的字串簽 JWT，任何人都能偽造 token。
+    raise RuntimeError("缺少環境變數 SECRET_KEY（本機寫進 backend/.env，Render 在 Environment 設定）")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
@@ -32,7 +35,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 
