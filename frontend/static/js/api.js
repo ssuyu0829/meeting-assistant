@@ -43,7 +43,7 @@ const API = {
 
   // groups
   listGroups:  ()              => api("GET",    "/api/groups"),
-  createGroup: (name, code)    => api("POST",   "/api/groups", { name, invitation_code: code }),
+  createGroup: (name)          => api("POST",   "/api/groups", { name }),  // 邀請碼由伺服器產生
   joinGroup:   (code)          => api("POST",   "/api/groups/join", { invitation_code: code }),
   getGroup:    (id)            => api("GET",    `/api/groups/${id}`),
   leaveGroup:  (id)            => api("DELETE", `/api/groups/${id}/leave`),

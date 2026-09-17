@@ -60,7 +60,7 @@ class GroupMember(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(Enum(GroupRole), default=GroupRole.member, nullable=False)
     joined_at = Column(DateTime, default=datetime.utcnow)
 
@@ -75,7 +75,7 @@ class Folder(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -88,8 +88,8 @@ class Meeting(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
-    folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(Enum(MeetingStatus), default=MeetingStatus.unfinished, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -119,7 +119,7 @@ class Availability(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date = Column(String, nullable=False)   # "YYYY/MM/DD"
     hour_slot = Column(Integer, nullable=False)  # 0=7:00-8:00 ... 15=22:00-23:00
     available = Column(Boolean, default=True, nullable=False)
@@ -134,7 +134,7 @@ class Attendance(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     absence_status = Column(Enum(AbsenceStatus), nullable=True)
     mission_status = Column(Enum(MissionStatus), nullable=True)
 

@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import IntegrityError
 import logging
 import os
 from pathlib import Path
@@ -32,6 +33,13 @@ if allowed_origins:
 @app.get("/healthz", include_in_schema=False)
 def healthz():
     return {"ok": True}
+
+
+@app.exception_handler(IntegrityError)
+def integrity_error_handler(request: Request, exc: IntegrityError):
+    """撞到唯一鍵（例如同時送出兩次）本來會變成 500，前端只看到 Request failed。"""
+    logging.getLogger(__name__).warning("IntegrityError on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=409, content={"detail": "資料已存在或衝突，請重新載入後再試"})
 
 app.include_router(auth.router)
 app.include_router(groups.router)

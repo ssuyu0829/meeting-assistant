@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict
 from database import get_db
 from auth import get_current_user
+from deps import require_meeting_member
 import models
 
 router = APIRouter(prefix="/api/availability", tags=["availability"])
@@ -37,10 +38,8 @@ def submit_availability(
     body: SubmitAvailabilityRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
+    meeting: models.Meeting = Depends(require_meeting_member),
 ):
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.status == models.MeetingStatus.finished:
         raise HTTPException(status_code=400, detail="Meeting is already finished")
 
@@ -80,11 +79,8 @@ def get_availability(
     meeting_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
+    meeting: models.Meeting = Depends(require_meeting_member),
 ):
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
     dates = sorted([d.date for d in meeting.dates])
     hour_slots = [slot_label(i) for i in range(HOUR_SLOTS)]
 

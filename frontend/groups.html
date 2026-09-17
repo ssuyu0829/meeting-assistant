@@ -46,10 +46,7 @@
         <label class="form-label">團體名稱（至多5字）</label>
         <input class="form-input" id="new-group-name" maxlength="5" placeholder="例：設計組">
       </div>
-      <div class="form-group">
-        <label class="form-label">邀請碼</label>
-        <input class="form-input" id="new-group-code" placeholder="自訂邀請碼">
-      </div>
+      <p class="form-label" style="opacity:.75">邀請碼由系統自動產生，建立後可在團體頁複製給成員。</p>
       <p class="err" id="create-err" style="color:var(--red-soft);font-size:0.8rem"></p>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal('modal-create')">取消</button>
@@ -118,21 +115,19 @@
     // create
     document.getElementById("btn-create").addEventListener("click", () => {
       document.getElementById("new-group-name").value = "";
-      document.getElementById("new-group-code").value = "";
       document.getElementById("create-err").textContent = "";
       openModal("modal-create");
     });
 
     document.getElementById("btn-create-confirm").addEventListener("click", async () => {
       const name = document.getElementById("new-group-name").value.trim();
-      const code = document.getElementById("new-group-code").value.trim();
       const errEl = document.getElementById("create-err");
       errEl.textContent = "";
-      if (!name || !code) { errEl.textContent = "請填寫所有欄位"; return; }
+      if (!name) { errEl.textContent = "請填寫團體名稱"; return; }
       try {
-        await API.createGroup(name, code);
+        const created = await API.createGroup(name);
         closeModal("modal-create");
-        showToast("團體建立成功");
+        showToast(`團體建立成功，邀請碼：${created.invitation_code}`);
         loadGroups();
       } catch (e) { errEl.textContent = e.message; }
     });
