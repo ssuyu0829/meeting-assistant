@@ -1,5 +1,7 @@
 # 開會小助手 (Meeting Assistant)
 
+[![CI](https://github.com/ssuyu0829/meeting-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/ssuyu0829/meeting-assistant/actions/workflows/ci.yml)
+
 > 日式極簡風格的線上會議排程與紀錄工具
 
 解決的問題：社團與小組要喬開會時間時，訊息在群組裡來回洗版，最後還是沒人記得結論。
@@ -203,6 +205,59 @@ git push
 > **注意：** 若只修改了 Render Environment 環境變數，需手動點擊 **Manual Deploy** 才會生效。
 
 ---
+
+## 七之二、系統架構
+
+```
+瀏覽器 (9 個靜態 HTML + api.js)
+    │  HTTPS
+    ▼
+Render 反向代理  ── 憑證、休眠喚醒、環境變數
+    │
+    ▼
+FastAPI (uvicorn)  單一服務同時做兩件事：
+    ├─ /api/*            JSON API（22 個端點，20 個需要 JWT）
+    └─ /{path}           送 frontend/ 底下的靜態檔（含路徑邊界檢查）
+    │  SQLAlchemy + 連線池 (pool_pre_ping / pool_recycle)
+    ▼
+Supabase PostgreSQL   9 張表；Render 的磁碟是暫時的，所以資料不放本機
+    │
+    └─ 背景工作 → Resend 寄開會通知信
+```
+
+**為什麼靜態檔也由 FastAPI 送**：前後端同源，省掉 CORS 與第二個部署目標。
+代價是要自己做路徑邊界檢查 —— 見下面〈安全性〉第 1 點，那正是我踩到的坑。
+
+**請求生命週期**：`get_current_user`（驗 JWT）→ `require_meeting_member`（驗群組成員）→ router
+→ SQLAlchemy Session（`get_db` 的 yield dependency，請求結束自動關閉）→ 回 Pydantic response model。
+
+## 七之三、安全性：兩個我自己找出來並修掉的漏洞
+
+比起宣稱「沒有漏洞」，這裡誠實記錄找到什麼、怎麼修、用什麼測試釘住。
+
+### 1. 靜態檔路徑遍歷（可讀到 `.env`）
+- **問題**：catch-all 路由直接 `os.path.join(frontend_dir, full_path)` 就送檔，沒有邊界檢查。
+  本機實測 `GET /%2e%2e/backend/.env` 會把 `.env` 整份回傳 —— 裡面有 `SECRET_KEY` 與資料庫連線字串。
+  （線上打同樣路徑回 400，是 Render 的代理先擋掉，**不是程式擋的**。）
+- **修法**：`main.py` 的 `serve_frontend` 先 `resolve()`，確認目標在 `frontend/` 底下才送，否則回 `index.html`。
+- **回歸測試**：`tests/test_api.py::test_no_path_traversal`（四種編碼寫法）。
+
+### 2. availability 端點越權存取（IDOR）
+- **問題**：`submit_availability` 與 `get_availability` 只檢查「會議存在」，沒檢查呼叫者是不是該群組成員。
+  任何登入者猜到連號的 `meeting_id`，就能讀到別人群組的成員姓名與時段，甚至塞資料進去。
+- **修法**：把成員檢查抽成 `deps.py::require_meeting_member` 這個 FastAPI dependency，兩個端點都掛上；
+  之後新增端點只要掛 dependency，不必記得複製檢查邏輯。
+- **回歸測試**：`tests/test_api.py::test_non_member_cannot_touch_availability`。
+
+### 其他已處理
+- `SECRET_KEY` 拿掉預設值：沒設就啟動失敗（有預設值＝任何人拿公開原始碼就能偽造 token）
+- 邀請碼改由伺服器 `secrets.token_urlsafe(9)` 產生（原本可自訂成 `lab-001` 這種猜得到的碼）
+- 加入群組失敗每人 5 分鐘 10 次上限、密碼至少 8 碼、`IntegrityError` 回 409 而不是 500
+
+### 已知仍未處理（誠實列出）
+- 登入本身沒有限速（只有加入群組有）
+- JWT 七天有效且無法撤銷
+- 限速是行程內記憶體計數，多實例或重啟後失效
 
 ## 八、設計決策（為什麼這樣選）
 
