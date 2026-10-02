@@ -5,6 +5,7 @@
 """
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -14,9 +15,16 @@ BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND))
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test_meeting_assistant.db")
+TEST_DB = Path(tempfile.gettempdir()) / f"meeting_assistant_test_{os.getpid()}.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB}"
 
 import main  # noqa: E402
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_database():
+    yield
+    TEST_DB.unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="module")
