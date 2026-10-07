@@ -12,14 +12,10 @@
 
 ---
 
-## 一、網站網址
+## 一、線上展示
 
-**正式網址：** https://meeting-assistant-k765.onrender.com
-
-> **注意事項**
-> - 使用 Render 免費方案，閒置 15 分鐘後會自動休眠
-> - 第一次開啟需等待約 50 秒喚醒，之後瀏覽速度正常
-> - 資料儲存在 Supabase，休眠不影響資料安全
+**線上 Demo 目前暫停**（Render 免費方案的服務維護中）。
+功能與權限邊界可由 `backend/tests/test_api.py` 與 CI 驗證，本機啟動方式見 [`HOW_TO_RUN.md`](HOW_TO_RUN.md)。
 
 ---
 
