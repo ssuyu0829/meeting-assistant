@@ -94,7 +94,7 @@
         const card = document.createElement("div");
         card.className = "item-card";
         card.innerHTML = `
-          <div class="item-card-name">${g.name}</div>
+          <div class="item-card-name">${escapeHtml(g.name)}</div>
           <div class="item-card-meta">${g.member_count} 位成員</div>
           <div class="item-card-badge ${g.role}">${g.role === 'leader' ? '建立者' : '成員'}</div>
         `;

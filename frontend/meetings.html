@@ -165,7 +165,7 @@
       const grid = document.getElementById("folders-grid");
       grid.innerHTML = "";
       if (!folders.length) {
-        document.getElementById("folders-section").style.display = folderId ? "none" : "none";
+        document.getElementById("folders-section").style.display = "none";
         return;
       }
       document.getElementById("folders-section").style.display = "block";
@@ -173,7 +173,7 @@
         const card = document.createElement("div");
         card.className = "item-card";
         card.innerHTML = `
-          <div class="item-card-name">📁 ${f.name}</div>
+          <div class="item-card-name">📁 ${escapeHtml(f.name)}</div>
           <div class="item-card-meta">${f.meeting_count} 個會議</div>
         `;
         card.addEventListener("click", () => {
@@ -196,12 +196,11 @@
         const card = document.createElement("div");
         card.className = "item-card" + (m.status === "finished" ? " finished" : "");
         card.innerHTML = `
-          <div class="item-card-name">${m.name}</div>
+          <div class="item-card-name">${escapeHtml(m.name)}</div>
           <div class="item-card-meta">${m.dates.length} 個日期</div>
           <div class="item-card-badge ${m.status === 'finished' ? 'finished' : ''}">${m.status === 'finished' ? '已結束' : '進行中'}</div>
         `;
         card.addEventListener("click", () => {
-          localStorage.setItem("currentMeeting", JSON.stringify(m));
           window.location.href = `/meeting.html?id=${m.id}`;
         });
         grid.appendChild(card);
@@ -225,7 +224,7 @@
       document.getElementById("info-leader").textContent = leader ? leader.name : "-";
       const membersEl = document.getElementById("info-members");
       membersEl.innerHTML = g.members.map(m =>
-        `<span class="pill">${m.name}</span>`
+        `<span class="pill">${escapeHtml(m.name)}</span>`
       ).join("");
       openModal("modal-info");
     });

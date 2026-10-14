@@ -58,15 +58,17 @@
     // chkState[date][slot] = bool
     const chkState = {};
     let dates = [];
+    let slotCount = 0;
 
     async function init() {
       const data = await API.getAvailability(meetingId);
       dates = data.dates;
+      slotCount = data.hour_slots.length;
 
       // pre-fill my slots
       dates.forEach(d => {
         chkState[d] = {};
-        for (let i = 0; i < 16; i++) chkState[d][i] = false;
+        for (let i = 0; i < slotCount; i++) chkState[d][i] = false;
         (data.my_slots[d] || []).forEach(i => { chkState[d][i] = true; });
       });
 
@@ -117,7 +119,7 @@
     document.getElementById("chk-all").addEventListener("change", e => {
       const val = e.target.checked;
       dates.forEach(d => {
-        for (let i = 0; i < 16; i++) chkState[d][i] = val;
+        for (let i = 0; i < slotCount; i++) chkState[d][i] = val;
       });
       document.querySelectorAll(".avail-cell").forEach(btn =>
         btn.classList.toggle("selected", val)

@@ -131,7 +131,7 @@
     function fillPills(elId, names) {
       const el = document.getElementById(elId);
       el.innerHTML = names.length
-        ? names.map(n => `<span class="pill">${n}</span>`).join("")
+        ? names.map(n => `<span class="pill">${escapeHtml(n)}</span>`).join("")
         : `<span style="color:var(--muted);font-size:0.8rem">—</span>`;
     }
 

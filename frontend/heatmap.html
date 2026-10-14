@@ -194,9 +194,9 @@
       document.getElementById("slot-info").style.display = "block";
 
       document.getElementById("slot-available").innerHTML =
-        availableNames.length ? availableNames.map(n => `<span class="pill available">${n}</span>`).join("") : "<span style='color:var(--muted);font-size:0.8rem'>無</span>";
+        availableNames.length ? availableNames.map(n => `<span class="pill available">${escapeHtml(n)}</span>`).join("") : "<span style='color:var(--muted);font-size:0.8rem'>無</span>";
       document.getElementById("slot-unavailable").innerHTML =
-        unavailable.length ? unavailable.map(n => `<span class="pill unavailable">${n}</span>`).join("") : "<span style='color:var(--muted);font-size:0.8rem'>無</span>";
+        unavailable.length ? unavailable.map(n => `<span class="pill unavailable">${escapeHtml(n)}</span>`).join("") : "<span style='color:var(--muted);font-size:0.8rem'>無</span>";
     }
 
     function populateDecideForm() {
@@ -234,7 +234,7 @@
       const errEl = document.getElementById("decide-err");
       errEl.textContent = "";
 
-      if (start >= end) { errEl.textContent = "結束時間必須晚於開始時間"; return; }
+      if (parseInt(start, 10) >= parseInt(end, 10)) { errEl.textContent = "結束時間必須晚於開始時間"; return; }
 
       try {
         await API.decideTime(meetingId, { date, start_time: start, end_time: end, notes });
