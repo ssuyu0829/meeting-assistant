@@ -1,11 +1,13 @@
+from typing import Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Dict
-from database import get_db
-from auth import get_current_user
-from deps import require_meeting_member
+from sqlalchemy.orm import Session
+
 import models
+from auth import get_current_user
+from database import get_db
+from deps import require_meeting_member
 
 router = APIRouter(prefix="/api/availability", tags=["availability"])
 

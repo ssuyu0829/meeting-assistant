@@ -6,9 +6,9 @@
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
+import models
 from auth import get_current_user
 from database import get_db
-import models
 
 
 def require_group_member(group_id: int, user_id: int, db: Session) -> models.GroupMember:
