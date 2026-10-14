@@ -1,11 +1,15 @@
-from datetime import datetime
-from sqlalchemy import (
-    Column, Integer, String, DateTime, Boolean,
-    ForeignKey, UniqueConstraint, Text, Enum
-)
-from sqlalchemy.orm import relationship
-from database import Base
 import enum
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import relationship
+
+from database import Base
+
+
+def _utcnow() -> datetime:
+    # datetime.utcnow 在 3.12 起 deprecated；統一用 timezone-aware 的 UTC
+    return datetime.now(timezone.utc)
 
 
 class GroupRole(str, enum.Enum):
@@ -37,7 +41,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     group_memberships = relationship("GroupMember", back_populates="user")
 
@@ -48,7 +52,7 @@ class Group(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     invitation_code = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     members = relationship("GroupMember", back_populates="group")
     folders = relationship("Folder", back_populates="group")
@@ -62,7 +66,7 @@ class GroupMember(Base):
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(Enum(GroupRole), default=GroupRole.member, nullable=False)
-    joined_at = Column(DateTime, default=datetime.utcnow)
+    joined_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (UniqueConstraint("group_id", "user_id"),)
 
@@ -77,7 +81,7 @@ class Folder(Base):
     name = Column(String, nullable=False)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     group = relationship("Group", back_populates="folders")
     meetings = relationship("Meeting", back_populates="folder")
@@ -92,14 +96,16 @@ class Meeting(Base):
     folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(Enum(MeetingStatus), default=MeetingStatus.unfinished, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     group = relationship("Group", back_populates="meetings")
     folder = relationship("Folder", back_populates="meetings")
     dates = relationship("MeetingDate", back_populates="meeting", cascade="all, delete-orphan")
     availability = relationship("Availability", back_populates="meeting", cascade="all, delete-orphan")
     attendance = relationship("Attendance", back_populates="meeting", cascade="all, delete-orphan")
-    record = relationship("MeetingRecord", back_populates="meeting", uselist=False, cascade="all, delete-orphan")
+    record = relationship(
+        "MeetingRecord", back_populates="meeting", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class MeetingDate(Base):

@@ -1,13 +1,16 @@
 import logging
 import os
+from typing import List, Optional
+
 import resend
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional, Dict
-from database import get_db
-from auth import get_current_user
+from sqlalchemy.orm import Session
+
 import models
+from auth import get_current_user
+from database import get_db
+from deps import require_meeting_member
 
 router = APIRouter(prefix="/api/records", tags=["records"])
 logger = logging.getLogger(__name__)
@@ -15,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 class AttendanceItem(BaseModel):
     user_id: int
-    absence_status: Optional[str] = None   # "ontime" | "late" | "absent"
-    mission_status: Optional[str] = None   # "done" | "undone" | "none"
+    # 用 enum 當型別：送進來不合法的值會直接被 Pydantic 擋成 422，不會進到 DB 層才炸 500
+    absence_status: Optional[models.AbsenceStatus] = None
+    mission_status: Optional[models.MissionStatus] = None
 
 
 class SaveAttendanceRequest(BaseModel):
@@ -124,13 +128,9 @@ def decide_time(
 @router.get("/{meeting_id}/attendance")
 def get_attendance(
     meeting_id: int,
+    meeting: models.Meeting = Depends(require_meeting_member),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
 ):
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
     # get all group members
     memberships = db.query(models.GroupMember).filter_by(group_id=meeting.group_id).all()
     result = []
@@ -160,6 +160,15 @@ def save_attendance(
     if meeting.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the meeting creator can update attendance")
 
+    # 只能替這個群組的成員登記出席，避免把紀錄塞到不相干的 user_id 上
+    member_ids = {
+        row[0]
+        for row in db.query(models.GroupMember.user_id).filter_by(group_id=meeting.group_id).all()
+    }
+    for item in body.items:
+        if item.user_id not in member_ids:
+            raise HTTPException(status_code=403, detail="User is not a member of this group")
+
     for item in body.items:
         att = db.query(models.Attendance).filter_by(
             meeting_id=meeting_id, user_id=item.user_id
@@ -168,9 +177,9 @@ def save_attendance(
             att = models.Attendance(meeting_id=meeting_id, user_id=item.user_id)
             db.add(att)
         if item.absence_status:
-            att.absence_status = models.AbsenceStatus(item.absence_status)
+            att.absence_status = item.absence_status
         if item.mission_status:
-            att.mission_status = models.MissionStatus(item.mission_status)
+            att.mission_status = item.mission_status
 
     db.commit()
     return {"ok": True}
@@ -181,13 +190,9 @@ def save_attendance(
 @router.get("/{meeting_id}/summary", response_model=MeetingSummaryOut)
 def get_summary(
     meeting_id: int,
+    meeting: models.Meeting = Depends(require_meeting_member),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
 ):
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
     record = meeting.record
     ontime, late, absent, done, undone, none_task = [], [], [], [], [], []
 

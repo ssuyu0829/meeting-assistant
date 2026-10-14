@@ -163,3 +163,78 @@ def test_non_member_cannot_touch_availability(client):
     r = client.get(f"/api/availability/{meeting_id}", headers=_auth(owner))
     assert r.status_code == 200
     assert r.json()["submitted_members"] == ["lead"]
+
+
+def _create_meeting(client, user, group_id, name="週會"):
+    r = client.post(
+        "/api/meetings",
+        json={"name": name, "group_id": group_id, "dates": ["2026/10/01"]},
+        headers=_auth(user),
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_non_member_cannot_read_attendance_or_summary(client):
+    """曾經的漏洞：attendance 與 summary 的 GET 只檢查會議存在，沒檢查成員身分。"""
+    owner = _register(client, "att-owner@example.com")
+    outsider = _register(client, "att-outsider@example.com")
+    group = _create_group(client, owner, "出席組")
+    meeting = _create_meeting(client, owner, group["id"])
+
+    for path in (f"/api/records/{meeting['id']}/attendance", f"/api/records/{meeting['id']}/summary"):
+        assert client.get(path, headers=_auth(outsider)).status_code == 403, path
+        assert client.get(path, headers=_auth(owner)).status_code == 200, path
+
+
+def test_attendance_rejects_invalid_status(client):
+    """不合法的狀態字串要回 422，而不是進到 enum 轉換才炸 500。"""
+    owner = _register(client, "att-enum@example.com")
+    group = _create_group(client, owner, "狀態組")
+    meeting = _create_meeting(client, owner, group["id"])
+
+    r = client.post(
+        f"/api/records/{meeting['id']}/attendance",
+        json={"items": [{"user_id": owner["user_id"], "absence_status": "bogus"}]},
+        headers=_auth(owner),
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_attendance_only_for_group_members(client):
+    owner = _register(client, "att-lead@example.com")
+    stranger = _register(client, "att-stranger@example.com")
+    group = _create_group(client, owner, "名單組")
+    meeting = _create_meeting(client, owner, group["id"])
+
+    r = client.post(
+        f"/api/records/{meeting['id']}/attendance",
+        json={"items": [{"user_id": stranger["user_id"], "absence_status": "ontime"}]},
+        headers=_auth(owner),
+    )
+    assert r.status_code == 403, r.text
+
+
+def test_attendance_roundtrip_to_summary(client):
+    owner = _register(client, "att-round@example.com")
+    group = _create_group(client, owner, "總結組")
+    meeting = _create_meeting(client, owner, group["id"])
+
+    r = client.post(
+        f"/api/records/{meeting['id']}/attendance",
+        json={"items": [{"user_id": owner["user_id"], "absence_status": "late", "mission_status": "done"}]},
+        headers=_auth(owner),
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.get(f"/api/records/{meeting['id']}/attendance", headers=_auth(owner))
+    assert r.json() == [{
+        "user_id": owner["user_id"], "name": "att-round",
+        "absence_status": "late", "mission_status": "done",
+    }]
+
+    summary = client.get(f"/api/records/{meeting['id']}/summary", headers=_auth(owner)).json()
+    assert summary["meeting_name"] == "週會"
+    assert summary["late"] == ["att-round"]
+    assert summary["done"] == ["att-round"]
+    assert summary["ontime"] == [] and summary["absent"] == []
