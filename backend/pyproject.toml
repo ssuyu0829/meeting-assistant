@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+# B008：FastAPI 的 Depends() 寫在參數預設值是官方慣例
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.ruff.lint.isort]
+# 本專案是 flat module（從 backend/ 直接跑），這些是自己的模組而不是第三方套件
+known-first-party = ["auth", "database", "deps", "models", "routers", "main"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

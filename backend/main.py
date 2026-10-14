@@ -1,16 +1,16 @@
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import IntegrityError
 import logging
 import os
 from pathlib import Path
 
-from database import engine, Base
-import models  # noqa: F401 — registers all models
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
 
-from routers import auth, groups, meetings, availability, records
+import models  # noqa: F401 — registers all models
+from database import Base, engine
+from routers import auth, availability, groups, meetings, records
 
 # Create tables
 Base.metadata.create_all(bind=engine)

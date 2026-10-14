@@ -1,6 +1,13 @@
 // ── API helper ──────────────────────────────────────────────────────────────
 const BASE = "";  // same origin
 
+// 凡是把使用者輸入（群組名、會議名、成員名）塞進 innerHTML 的地方都先過這層，避免 XSS
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
 function getToken() { return localStorage.getItem("token"); }
 function getUser()  { return JSON.parse(localStorage.getItem("user") || "null"); }
 

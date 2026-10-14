@@ -102,9 +102,9 @@
       bc.innerHTML = `
         <span onclick="window.location.href='/groups.html'">你的團體</span>
         <span class="sep">›</span>
-        <span onclick="history.back()">${g.name || "團體"}</span>
+        <span onclick="history.back()">${escapeHtml(g.name || "團體")}</span>
         <span class="sep">›</span>
-        <span>${meeting.name}</span>
+        <span>${escapeHtml(meeting.name)}</span>
       `;
 
       if (meeting.status === "finished") {

@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from typing import List, Optional
-from database import get_db
-from auth import get_current_user
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 import models
+from auth import get_current_user
+from database import get_db
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
