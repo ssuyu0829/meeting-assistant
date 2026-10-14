@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_user
 from database import get_db
+from deps import require_group_member
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -68,7 +69,7 @@ def list_folders(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _require_member(group_id, current_user.id, db)
+    require_group_member(group_id, current_user.id, db)
     folders = db.query(models.Folder).filter_by(group_id=group_id).all()
     return [FolderOut(
         id=f.id, name=f.name, group_id=f.group_id,
@@ -82,7 +83,7 @@ def create_folder(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _require_member(body.group_id, current_user.id, db)
+    require_group_member(body.group_id, current_user.id, db)
     if len(body.name) > 6:
         raise HTTPException(status_code=400, detail="Folder name must be 6 characters or fewer")
     existing_names = [f.name for f in db.query(models.Folder).filter_by(group_id=body.group_id).all()]
@@ -104,7 +105,7 @@ def list_group_meetings(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _require_member(group_id, current_user.id, db)
+    require_group_member(group_id, current_user.id, db)
 
     folders = db.query(models.Folder).filter_by(group_id=group_id).all()
     folder_outs = [FolderOut(
@@ -129,7 +130,7 @@ def list_folder_meetings(
     folder = db.get(models.Folder, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    _require_member(folder.group_id, current_user.id, db)
+    require_group_member(folder.group_id, current_user.id, db)
     return [_meeting_to_out(m, current_user.id, db) for m in folder.meetings]
 
 
@@ -139,7 +140,7 @@ def create_meeting(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _require_member(body.group_id, current_user.id, db)
+    require_group_member(body.group_id, current_user.id, db)
     if len(body.name) > 8:
         raise HTTPException(status_code=400, detail="Meeting name must be 8 characters or fewer")
     if not body.dates:
@@ -181,7 +182,7 @@ def get_meeting(
     meeting = db.get(models.Meeting, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    _require_member(meeting.group_id, current_user.id, db)
+    require_group_member(meeting.group_id, current_user.id, db)
     return _meeting_to_out(meeting, current_user.id, db)
 
 
@@ -199,10 +200,3 @@ def finish_meeting(
     meeting.status = models.MeetingStatus.finished
     db.commit()
     return {"ok": True}
-
-
-# ─── Helper ─────────────────────────────────────────────────────────────────
-
-def _require_member(group_id: int, user_id: int, db: Session):
-    if not db.query(models.GroupMember).filter_by(group_id=group_id, user_id=user_id).first():
-        raise HTTPException(status_code=403, detail="Not a member of this group")

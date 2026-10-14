@@ -61,12 +61,8 @@ class MeetingSummaryOut(BaseModel):
 # ─── Meeting Record ──────────────────────────────────────────────────────────
 
 @router.get("/{meeting_id}", response_model=MeetingRecordOut)
-def get_record(
-    meeting_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    record = _require_record(meeting_id, current_user.id, db)
+def get_record(meeting: models.Meeting = Depends(require_meeting_member)):
+    record = _require_record(meeting)
     return MeetingRecordOut(
         record_text=record.record_text or "",
         decided_time=record.decided_time or "",
@@ -77,12 +73,11 @@ def get_record(
 
 @router.post("/{meeting_id}/note")
 def save_note(
-    meeting_id: int,
     body: SaveMeetingNoteRequest,
+    meeting: models.Meeting = Depends(require_meeting_member),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
 ):
-    record = _require_record(meeting_id, current_user.id, db)
+    record = _require_record(meeting)
     record.record_text = body.record_text
     db.commit()
     return {"ok": True}
@@ -90,21 +85,15 @@ def save_note(
 
 @router.post("/{meeting_id}/decide-time")
 def decide_time(
-    meeting_id: int,
     body: DecideTimeRequest,
     background_tasks: BackgroundTasks,
+    meeting: models.Meeting = Depends(require_meeting_member),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the meeting creator can decide the time")
-
-    record = meeting.record
-    if not record:
-        raise HTTPException(status_code=404, detail="Meeting record not found")
+    record = _require_record(meeting)
 
     decided_time = f"{body.date}  {body.start_time}~{body.end_time}"
     record.decided_time = decided_time
@@ -149,14 +138,11 @@ def get_attendance(
 
 @router.post("/{meeting_id}/attendance")
 def save_attendance(
-    meeting_id: int,
     body: SaveAttendanceRequest,
+    meeting: models.Meeting = Depends(require_meeting_member),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the meeting creator can update attendance")
 
@@ -171,10 +157,10 @@ def save_attendance(
 
     for item in body.items:
         att = db.query(models.Attendance).filter_by(
-            meeting_id=meeting_id, user_id=item.user_id
+            meeting_id=meeting.id, user_id=item.user_id
         ).first()
         if not att:
-            att = models.Attendance(meeting_id=meeting_id, user_id=item.user_id)
+            att = models.Attendance(meeting_id=meeting.id, user_id=item.user_id)
             db.add(att)
         if item.absence_status:
             att.absence_status = item.absence_status
@@ -225,14 +211,8 @@ def get_summary(
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def _require_record(meeting_id: int, user_id: int, db: Session) -> models.MeetingRecord:
-    meeting = db.get(models.Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    if not db.query(models.GroupMember).filter_by(
-        group_id=meeting.group_id, user_id=user_id
-    ).first():
-        raise HTTPException(status_code=403, detail="Not a member")
+def _require_record(meeting: models.Meeting) -> models.MeetingRecord:
+    """會議存在與成員身分已由 require_meeting_member 把關，這裡只確認紀錄列存在。"""
     if not meeting.record:
         raise HTTPException(status_code=404, detail="Record not found")
     return meeting.record

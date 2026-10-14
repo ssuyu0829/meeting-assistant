@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_user
 from database import get_db
+from deps import require_group_member
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -161,12 +162,7 @@ def get_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    membership = db.query(models.GroupMember).filter_by(
-        group_id=group_id, user_id=current_user.id
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this group")
-
+    membership = require_group_member(group_id, current_user.id, db)
     group = db.get(models.Group, group_id)
     members = []
     for m in group.members:
@@ -191,11 +187,7 @@ def leave_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    membership = db.query(models.GroupMember).filter_by(
-        group_id=group_id, user_id=current_user.id
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=404, detail="Not a member")
+    membership = require_group_member(group_id, current_user.id, db)
     db.delete(membership)
     db.commit()
     return {"ok": True}
