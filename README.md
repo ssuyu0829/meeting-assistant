@@ -278,7 +278,6 @@ Supabase PostgreSQL   9 張表；Render 的磁碟是暫時的，所以資料不�
 - **免費方案冷啟動**：閒置 15 分鐘後第一次開啟要等約 50 秒。
 - **沒有寄信重試**：Resend 失敗只會寫進 log，不會重送。
 - **schema 用 `create_all` 建立**：之後改欄位需要手動處理（`backend/migrations/` 是手動跑的 SQL），還沒導入 Alembic 之類的 migration 工具。
-- **成員檢查仍有重複實作**：`groups.py`、`meetings.py`、`records.py` 各有一份自己的成員查詢，應全部改用 `deps.py`。
 - **部分列表端點有 N+1 查詢**：例如列團體時每個團體各查一次成員數；資料量小看不出來，之後應改成 join 或 group by。
 - **測試涵蓋認證、權限邊界、路徑遍歷與出席／總結**，熱力圖的彙總邏輯與寄信流程還沒有測試。
 

@@ -238,3 +238,14 @@ def test_attendance_roundtrip_to_summary(client):
     assert summary["late"] == ["att-round"]
     assert summary["done"] == ["att-round"]
     assert summary["ontime"] == [] and summary["absent"] == []
+
+
+def test_non_member_cannot_leave_or_view_group(client):
+    """團體相關端點統一走 deps.require_group_member，非成員一律 403。"""
+    owner = _register(client, "grp-owner@example.com")
+    outsider = _register(client, "grp-outsider@example.com")
+    group = _create_group(client, owner, "離開組")
+
+    assert client.get(f"/api/groups/{group['id']}", headers=_auth(outsider)).status_code == 403
+    assert client.delete(f"/api/groups/{group['id']}/leave", headers=_auth(outsider)).status_code == 403
+    assert client.get(f"/api/groups/{group['id']}", headers=_auth(owner)).status_code == 200
